@@ -1,0 +1,1900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Aether AI — 3D Anime Human Companion & Interactive Pitch</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Three.js r128 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  
+  <!-- Google Fonts: Inter & Space Grotesk -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      background-color: #070913;
+      color: #f8fafc;
+      user-select: none;
+    }
+
+    h1, h2, h3, .font-display {
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      cursor: grab;
+    }
+
+    #canvas-container:active {
+      cursor: grabbing;
+    }
+
+    /* Glassmorphic HUD Surfaces */
+    .glass-panel {
+      background: rgba(13, 18, 34, 0.62);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.38);
+    }
+
+    .glass-pill {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      transition: all 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .glass-pill:hover {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.28);
+      transform: translateY(-1px);
+    }
+
+    .glass-pill:active {
+      transform: scale(0.96);
+    }
+
+    /* Custom Scrollbar for Chat / Pitch Drawer */
+    .custom-scroll::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 9999px;
+    }
+
+    /* Audio Visualizer Bars */
+    @keyframes eqPulse {
+      0%, 100% { height: 6px; }
+      50% { height: 22px; }
+    }
+    .eq-bar {
+      width: 3px;
+      height: 6px;
+      border-radius: 9999px;
+      background: currentColor;
+      transition: height 0.1s ease;
+    }
+    .speaking .eq-bar:nth-child(1) { animation: eqPulse 0.45s infinite ease-in-out 0.05s; }
+    .speaking .eq-bar:nth-child(2) { animation: eqPulse 0.38s infinite ease-in-out 0.18s; }
+    .speaking .eq-bar:nth-child(3) { animation: eqPulse 0.52s infinite ease-in-out 0.10s; }
+    .speaking .eq-bar:nth-child(4) { animation: eqPulse 0.41s infinite ease-in-out 0.25s; }
+    .speaking .eq-bar:nth-child(5) { animation: eqPulse 0.47s infinite ease-in-out 0.14s; }
+
+    /* Listening Pulse Ring */
+    @keyframes pulseRing {
+      0% { transform: scale(0.95); opacity: 0.75; }
+      70% { transform: scale(1.38); opacity: 0; }
+      100% { transform: scale(1.38); opacity: 0; }
+    }
+    .mic-pulse::before {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 9999px;
+      border: 2px solid #f43f5e;
+      animation: pulseRing 1.4s infinite cubic-bezier(0.215, 0.61, 0.355, 1);
+    }
+
+    /* Hide scrollbar for horizontal quick chips */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* Dynamic Accent Theme Variables */
+    :root {
+      --accent-primary: #38bdf8;
+      --accent-secondary: #818cf8;
+      --accent-glow: rgba(56, 189, 248, 0.35);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 3D Viewport Canvas -->
+  <div id="canvas-container"></div>
+
+  <!-- Non-Intrusive Toast / Notification Banner -->
+  <div id="toast-banner" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-300 transform -translate-y-2">
+    <div class="glass-panel px-4 py-2 rounded-full text-xs font-medium text-white flex items-center gap-2 shadow-xl">
+      <span id="toast-dot" class="w-2 h-2 rounded-full bg-sky-400"></span>
+      <span id="toast-text">Notification</span>
+    </div>
+  </div>
+
+  <!-- Main HUD Overlay -->
+  <div class="fixed inset-0 z-10 pointer-events-none flex flex-col justify-between p-3 sm:p-5">
+
+    <!-- TOP BAR: Character Switcher, Language Selector & Pitch Deck Toggle -->
+    <header class="flex flex-wrap items-center justify-between gap-2 pointer-events-auto">
+      
+      <!-- Brand + Active Persona Pill -->
+      <div class="glass-panel rounded-2xl px-3.5 py-2 flex items-center gap-3">
+        <div id="persona-badge-dot" class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-400 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/25">
+          <i data-lucide="sparkles" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-display font-bold text-sm sm:text-base tracking-tight text-white">KALAI.AI</h1>
+            <span id="status-pill" class="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+              Live 3D AI
+            </span>
+          </div>
+          <p id="persona-subtitle" class="text-[11px] text-slate-300/80 hidden sm:block">Aether • Boy Tech Founder (Real Boy Voice)</p>
+        </div>
+      </div>
+
+      <!-- Center Character Switcher -->
+      <div class="glass-panel rounded-2xl p-1.5 flex items-center gap-1 order-3 sm:order-2 w-full sm:w-auto justify-center">
+        <button onclick="switchCharacter('aether')" id="btn-char-aether" class="char-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 bg-white/15 text-white border border-white/30 shadow-sm">
+          <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+          <span>Aether</span>
+          <span class="hidden md:inline text-[10px] opacity-75">(Boy)</span>
+        </button>
+        <button onclick="switchCharacter('kira')" id="btn-char-kira" class="char-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 text-slate-300 hover:text-white">
+          <span class="w-2 h-2 rounded-full bg-fuchsia-400"></span>
+          <span>Kira</span>
+          <span class="hidden md:inline text-[10px] opacity-75">(Girl)</span>
+        </button>
+        <button onclick="switchCharacter('unitx')" id="btn-char-unitx" class="char-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 text-slate-300 hover:text-white">
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span>Unit-X</span>
+          <span class="hidden md:inline text-[10px] opacity-75">(Robot)</span>
+        </button>
+        <button onclick="testCurrentVoice()" title="Hear Character Voice Sample" class="px-2.5 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/35 text-sky-200 border border-sky-400/30 text-[11px] font-semibold flex items-center gap-1 transition shrink-0">
+          <i data-lucide="audio-waveform" class="w-3.5 h-3.5"></i>
+          <span>Test Voice</span>
+        </button>
+      </div>
+
+      <!-- Right Controls: Language Selector, Voice Toggle & Pitch Deck -->
+      <div class="flex items-center gap-2 order-2 sm:order-3">
+        <!-- Language Dropdown -->
+        <div class="glass-panel rounded-2xl px-2.5 py-1.5 flex items-center gap-1.5">
+          <i data-lucide="globe" class="w-4 h-4 text-sky-400 shrink-0"></i>
+          <select id="language-select" onchange="handleLanguageChange()" class="bg-transparent text-xs font-medium text-white focus:outline-none cursor-pointer pr-1">
+            <option value="auto" class="bg-slate-900 text-white">Auto-Detect (Any Lang)</option>
+            <option value="en-US" class="bg-slate-900 text-white">English</option>
+            <option value="ta-IN" class="bg-slate-900 text-white">தமிழ் (Tamil)</option>
+            <option value="tanglish" class="bg-slate-900 text-white">Tanglish (Tamil+Eng)</option>
+            <option value="hi-IN" class="bg-slate-900 text-white">हिन्दी (Hindi)</option>
+            <option value="ja-JP" class="bg-slate-900 text-white">日本語 (Japanese)</option>
+            <option value="es-ES" class="bg-slate-900 text-white">Español (Spanish)</option>
+            <option value="fr-FR" class="bg-slate-900 text-white">Français (French)</option>
+          </select>
+        </div>
+
+        <!-- TTS Mute/Unmute -->
+        <button onclick="toggleSpeechOutput()" id="btn-tts-toggle" title="Toggle AI Voice Output" class="glass-panel w-9 h-9 rounded-2xl flex items-center justify-center text-sky-300 hover:text-white transition">
+          <i id="icon-tts" data-lucide="volume-2" class="w-4 h-4"></i>
+        </button>
+
+        <!-- Interactive Pitch Showcase Button -->
+        <button onclick="togglePitchDrawer()" class="glass-panel px-3.5 py-2 rounded-2xl text-xs font-semibold text-white flex items-center gap-1.5 hover:bg-white/15 transition border border-sky-400/30">
+          <i data-lucide="presentation" class="w-4 h-4 text-sky-400"></i>
+          <span>AI Pitch Deck</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- MIDDLE LAYER: Floating Speech Bubble & Side Action Triggers -->
+    <div class="relative flex-1 flex flex-col justify-between my-2 pointer-events-none">
+      
+      <!-- Top-Center / Floating AI Speech Dialogue Bubble -->
+      <div class="w-full max-w-xl mx-auto mt-1 sm:mt-2 pointer-events-auto">
+        <div id="speech-bubble" class="glass-panel rounded-3xl p-4 sm:px-5 sm:py-3.5 transition-all duration-300 border border-white/15 relative">
+          <div class="flex items-center justify-between gap-2 mb-1.5">
+            <div class="flex items-center gap-2">
+              <span id="speaker-name" class="text-xs font-bold uppercase tracking-wider text-sky-400">Aether</span>
+              <span id="detected-lang-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-slate-300">Auto-Lang Ready</span>
+            </div>
+            <!-- Equalizer Visualizer -->
+            <div id="eq-visualizer" class="flex items-center gap-1 h-5 text-sky-400">
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+            </div>
+          </div>
+          
+          <p id="ai-dialogue-text" class="text-sm sm:text-[15px] leading-relaxed text-slate-100 font-normal">
+            Vanakkam! I'm Aether, your 3D AI human companion. Tap my head, ask me anything in Tamil, Tanglish, English, or any language, or ask me to pitch Kalai's AI vision!
+          </p>
+
+          <!-- Interactive Tap Hint -->
+          <div class="mt-2 pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
+            <span class="flex items-center gap-1">
+              <i data-lucide="hand" class="w-3 h-3 text-sky-400"></i>
+              Tip: Tap/click my head or body, or drag to rotate view
+            </span>
+            <button onclick="toggleChatHistory()" class="text-sky-300 hover:text-sky-200 font-medium flex items-center gap-1">
+              <i data-lucide="history" class="w-3 h-3"></i>
+              <span>Chat Log</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Floating Quick Body Animation Triggers (Talking Tom style actions) -->
+      <div class="hidden sm:flex flex-col gap-2 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-auto">
+        <div class="glass-panel rounded-2xl p-2 flex flex-col gap-1.5">
+          <span class="text-[9px] uppercase tracking-widest text-slate-400 text-center font-semibold py-0.5">Actions</span>
+          <button onclick="triggerCharacterAction('wave', true)" class="glass-pill p-2.5 rounded-xl flex flex-col items-center gap-1 text-slate-200" title="Wave Hello">
+            <i data-lucide="hand" class="w-4 h-4 text-sky-400"></i>
+            <span class="text-[10px]">Wave</span>
+          </button>
+          <button onclick="triggerCharacterAction('dance', true)" class="glass-pill p-2.5 rounded-xl flex flex-col items-center gap-1 text-slate-200" title="Celebrate / Dance">
+            <i data-lucide="music" class="w-4 h-4 text-fuchsia-400"></i>
+            <span class="text-[10px]">Dance</span>
+          </button>
+          <button onclick="triggerCharacterAction('pitch', true)" class="glass-pill p-2.5 rounded-xl flex flex-col items-center gap-1 text-slate-200" title="Present Pitch">
+            <i data-lucide="zap" class="w-4 h-4 text-amber-400"></i>
+            <span class="text-[10px]">Pitch</span>
+          </button>
+          <button onclick="triggerCharacterAction('think', true)" class="glass-pill p-2.5 rounded-xl flex flex-col items-center gap-1 text-slate-200" title="Deep Think">
+            <i data-lucide="brain" class="w-4 h-4 text-emerald-400"></i>
+            <span class="text-[10px]">Think</span>
+          </button>
+          <button onclick="triggerCharacterAction('salute', true)" class="glass-pill p-2.5 rounded-xl flex flex-col items-center gap-1 text-slate-200" title="Respect Salute">
+            <i data-lucide="shield-check" class="w-4 h-4 text-rose-400"></i>
+            <span class="text-[10px]">Salute</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- BOTTOM DOCK: Quick Prompts + Voice & Text Input Bar -->
+    <footer class="w-full max-w-2xl mx-auto flex flex-col gap-2 pointer-events-auto">
+      
+      <!-- Quick Prompt Pills -->
+      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+        <button onclick="sendQuickPrompt('Introduce yourself and tell me what you can do!')" class="glass-pill shrink-0 px-3 py-1.5 rounded-full text-xs text-slate-200 flex items-center gap-1.5">
+          <span>✨</span>
+          <span>Introduce Yourself</span>
+        </button>
+        <button onclick="sendQuickPrompt('Pitch Kalai\'s AI startup vision in an inspiring way!')" class="glass-pill shrink-0 px-3 py-1.5 rounded-full text-xs text-slate-200 flex items-center gap-1.5">
+          <span>🚀</span>
+          <span>Pitch AI Vision</span>
+        </button>
+        <button onclick="sendQuickPrompt('Unna pathi Tamil la super-aa sollu!')" class="glass-pill shrink-0 px-3 py-1.5 rounded-full text-xs text-slate-200 flex items-center gap-1.5">
+          <span>🇮🇳</span>
+          <span>Tamil / Tanglish Talk</span>
+        </button>
+        <button onclick="sendQuickPrompt('Do a cool celebration dance move right now!')" class="glass-pill shrink-0 px-3 py-1.5 rounded-full text-xs text-slate-200 flex items-center gap-1.5">
+          <span>🕺</span>
+          <span>Do a Dance Move</span>
+        </button>
+        <button onclick="sendQuickPrompt('Switch character and show me a different anime world!')" class="glass-pill shrink-0 px-3 py-1.5 rounded-full text-xs text-slate-200 flex items-center gap-1.5">
+          <span>🌌</span>
+          <span>Switch World</span>
+        </button>
+      </div>
+
+      <!-- Main Conversational Control Bar -->
+      <div class="glass-panel rounded-3xl p-2 flex items-center gap-2 border border-white/15">
+        
+        <!-- Live Mic Button -->
+        <button onclick="toggleVoiceRecognition()" id="btn-mic" title="Speak to AI (Auto-detects any language)" class="relative w-11 h-11 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-600 hover:from-rose-400 hover:to-pink-500 text-white flex items-center justify-center shrink-0 shadow-lg shadow-rose-500/25 transition">
+          <i id="icon-mic" data-lucide="mic" class="w-5 h-5"></i>
+        </button>
+
+        <!-- Continuous Live Conversation Mode Toggle -->
+        <button onclick="toggleLiveLoopMode()" id="btn-live-loop" title="Auto-Loop Voice Chat (Hands-free Talking Tom + AI mode)" class="px-2.5 py-2 rounded-2xl glass-pill text-[11px] font-semibold text-slate-300 flex items-center gap-1 shrink-0">
+          <span id="live-loop-dot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+          <span class="hidden sm:inline">Live Loop</span>
+        </button>
+
+        <!-- Text Input -->
+        <form onsubmit="handleTextSubmit(event)" class="flex-1 flex items-center gap-2">
+          <input
+            id="user-input"
+            type="text"
+            autocomplete="off"
+            placeholder="Ask anything in Tamil, English, Hindi, Japanese... or say 'dance'!"
+            class="w-full bg-transparent text-sm text-white placeholder-slate-400 focus:outline-none px-2 py-2"
+          />
+          <button type="submit" id="btn-send" class="w-10 h-10 rounded-2xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold flex items-center justify-center shrink-0 transition shadow-lg shadow-sky-500/25">
+            <i data-lucide="send" class="w-4 h-4"></i>
+          </button>
+        </form>
+      </div>
+    </footer>
+  </div>
+
+  <!-- SLIDE-OVER DRAWER 1: Interactive AI Pitch Showcase Deck -->
+  <aside id="pitch-drawer" class="fixed inset-y-0 right-0 z-40 w-full max-w-md glass-panel border-l border-white/15 transform translate-x-full transition-transform duration-300 ease-out flex flex-col">
+    <div class="p-5 border-b border-white/10 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-400">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+        </div>
+        <div>
+          <h2 class="font-display font-bold text-base text-white">Interactive AI Vision Pitch</h2>
+          <p class="text-xs text-slate-400">Click any slide to have your 3D AI character present it</p>
+        </div>
+      </div>
+      <button onclick="togglePitchDrawer()" class="w-8 h-8 rounded-xl glass-pill flex items-center justify-center text-slate-300 hover:text-white">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto custom-scroll p-5 space-y-4">
+      <!-- Pitch Slide 1 -->
+      <div onclick="presentPitchSlide(0)" class="glass-pill rounded-2xl p-4 cursor-pointer group">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-sky-400">01 • The Core Vision</span>
+          <span class="text-xs text-slate-400 group-hover:text-sky-300 flex items-center gap-1">
+            <i data-lucide="play-circle" class="w-3.5 h-3.5"></i> Present
+          </span>
+        </div>
+        <h3 class="font-display font-bold text-base text-white mb-1">Embodied Multilingual AI Humans</h3>
+        <p class="text-xs text-slate-300 leading-relaxed">
+          Moving beyond boring text chatboxes—combining expressive 3D anime avatars, real-time emotion, and native multilingual intelligence so anyone can interact naturally in their mother tongue.
+        </p>
+      </div>
+
+      <!-- Pitch Slide 2 -->
+      <div onclick="presentPitchSlide(1)" class="glass-pill rounded-2xl p-4 cursor-pointer group">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-fuchsia-400">02 • Hyper-Personalization</span>
+          <span class="text-xs text-slate-400 group-hover:text-fuchsia-300 flex items-center gap-1">
+            <i data-lucide="play-circle" class="w-3.5 h-3.5"></i> Present
+          </span>
+        </div>
+        <h3 class="font-display font-bold text-base text-white mb-1">Adaptive Personas, Voices & Worlds</h3>
+        <p class="text-xs text-slate-300 leading-relaxed">
+          Instant switching between Aether (Boy Founder), Kira (Cute Girl Co-Pilot), and Unit-X (Autonomous Robot Mech)—each transforming the 3D environment, voice profile, and behavior.
+        </p>
+      </div>
+
+      <!-- Pitch Slide 3 -->
+      <div onclick="presentPitchSlide(2)" class="glass-pill rounded-2xl p-4 cursor-pointer group">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-400">03 • Zero-Barrier Language AI</span>
+          <span class="text-xs text-slate-400 group-hover:text-emerald-300 flex items-center gap-1">
+            <i data-lucide="play-circle" class="w-3.5 h-3.5"></i> Present
+          </span>
+        </div>
+        <h3 class="font-display font-bold text-base text-white mb-1">Seamless Tamil, Tanglish & Global Fluency</h3>
+        <p class="text-xs text-slate-300 leading-relaxed">
+          Built with automatic language detection and code-switching understanding—speak naturally in Tamil, Tanglish, English, Hindi, or Japanese without toggling complex settings.
+        </p>
+      </div>
+
+      <!-- Pitch Slide 4 -->
+      <div onclick="presentPitchSlide(3)" class="glass-pill rounded-2xl p-4 cursor-pointer group">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-amber-400">04 • Real-World Applications</span>
+          <span class="text-xs text-slate-400 group-hover:text-amber-300 flex items-center gap-1">
+            <i data-lucide="play-circle" class="w-3.5 h-3.5"></i> Present
+          </span>
+        </div>
+        <h3 class="font-display font-bold text-base text-white mb-1">Interactive Brand Hosts, Tutors & Companions</h3>
+        <p class="text-xs text-slate-300 leading-relaxed">
+          Deployable directly in web browsers with zero heavy installs—ideal for AI product demos, interactive customer concierges, language tutors, and next-gen digital companions.
+        </p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- SLIDE-OVER DRAWER 2: Conversation History Log -->
+  <aside id="history-drawer" class="fixed inset-y-0 left-0 z-40 w-full max-w-md glass-panel border-r border-white/15 transform -translate-x-full transition-transform duration-300 ease-out flex flex-col">
+    <div class="p-5 border-b border-white/10 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="message-square" class="w-4 h-4 text-sky-400"></i>
+        <h2 class="font-display font-bold text-base text-white">Conversation Log</h2>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="clearChatHistory()" class="px-2.5 py-1 rounded-lg text-xs text-rose-300 hover:bg-rose-500/20 transition">Clear</button>
+        <button onclick="toggleChatHistory()" class="w-8 h-8 rounded-xl glass-pill flex items-center justify-center text-slate-300 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+    <div id="chat-log-container" class="flex-1 overflow-y-auto custom-scroll p-4 space-y-3 text-sm">
+      <!-- Populated dynamically -->
+    </div>
+  </aside>
+
+  <script>
+    // =========================================================================
+    // 1. INITIALIZE ICONS & GLOBAL STATE
+    // =========================================================================
+    lucide.createIcons();
+
+    const apiKey = ""; // Canvas runtime automatically supplies API key
+
+    const CHARACTERS = {
+      aether: {
+        id: 'aether',
+        type: 'boy',
+        name: 'Aether',
+        subtitle: 'Aether • Boy Tech Founder (Real Boy Voice)',
+        accentHex: '#38bdf8',
+        accentThree: 0x38bdf8,
+        secondaryThree: 0x6366f1,
+        bgTop: 0x060b19,
+        bgFog: 0x09132b,
+        hairColor: 0x1e293b,
+        hairHighlight: 0x38bdf8,
+        eyeColor: 0x0ea5e9,
+        skinColor: 0xffdfc4,
+        outfitPrimary: 0x0f172a,
+        outfitTrim: 0x38bdf8,
+        voiceGender: 'male',
+        voicePitch: 0.90,
+        voiceRate: 1.02,
+        voiceSample: "Hey! I'm Aether. Let's build something extraordinary with AI today!",
+        personaPrompt: `You are Aether, a sharp, confident 3D anime boy Tech Founder & Interactive Pitch Host created by Kalai. You wear a sleek midnight-blue tech jacket with glowing cyan cyber-lines inside a holographic cyber lab. Speak with a warm, energetic young male founder vibe.`,
+        greeting: "Vanakkam! I'm Aether, your 3D anime boy founder companion. Ask me anything in Tamil, Tanglish, English, or any language—or tap me to test my reactions!"
+      },
+      kira: {
+        id: 'kira',
+        type: 'girl',
+        name: 'Kira',
+        subtitle: 'Kira • Cute Anime Girl Co-Pilot (Cute Girl Voice)',
+        accentHex: '#f472b6',
+        accentThree: 0xf472b6,
+        secondaryThree: 0xc084fc,
+        bgTop: 0x160722,
+        bgFog: 0x250b38,
+        hairColor: 0xf8fafc,
+        hairHighlight: 0xf472b6,
+        eyeColor: 0xec4899,
+        skinColor: 0xffe6d5,
+        outfitPrimary: 0x3b0764,
+        outfitTrim: 0xf9a8d4,
+        voiceGender: 'female',
+        voicePitch: 1.34,
+        voiceRate: 1.08,
+        voiceSample: "Hii! I'm Kira, your cute AI co-pilot! Ready to have some fun and explore?",
+        personaPrompt: `You are Kira, a super cute, bright, expressive 3D anime girl AI Co-Pilot with flowing hair and glowing star accents aboard an orbital deck. Be cheerful, playful, sweet, and helpful.`,
+        greeting: "Hii & Konnichiwa! I'm Kira, your cute anime girl AI co-pilot! Tap me, chat in any language, or ask me to dance!"
+      },
+      unitx: {
+        id: 'unitx',
+        type: 'robot',
+        name: 'Unit-X',
+        subtitle: 'Unit-X • Autonomous AI Mech (Robotic Voice)',
+        accentHex: '#fb923c',
+        accentThree: 0xfb923c,
+        secondaryThree: 0x22d3ee,
+        bgTop: 0x140b07,
+        bgFog: 0x24130a,
+        hairColor: 0x0f172a,
+        hairHighlight: 0xfb923c,
+        eyeColor: 0x22d3ee,
+        skinColor: 0xcbd5e1,
+        outfitPrimary: 0x1e293b,
+        outfitTrim: 0xfb923c,
+        voiceGender: 'robot',
+        voicePitch: 0.68,
+        voiceRate: 0.94,
+        voiceSample: "Systems online. Unit-X operational. Ready to execute your commands.",
+        personaPrompt: `You are Unit-X, an advanced, charismatic 3D humanoid AI Robot Mech in a high-tech robotics foundry. Speak like a cool, intelligent sci-fi AI robot—concise, sharp, slightly playful, and futuristic.`,
+        greeting: "Systems online! I am Unit-X, your autonomous AI robot companion. Voice processors calibrated for all human languages. Awaiting your command!"
+      }
+    };
+
+    const PITCH_SLIDES = [
+      {
+        title: "Embodied Multilingual AI Humans",
+        prompt: "Present Pitch Slide 1: Explain why 3D anime AI human companions with real-time emotion and voice are the future beyond plain text chatbots. Keep it punchy and inspiring!"
+      },
+      {
+        title: "Adaptive Personas, Voices & Worlds",
+        prompt: "Present Pitch Slide 2: Explain how switching between Aether (Boy Founder), Kira (Cute Girl Co-Pilot), and Unit-X (Autonomous Robot Mech) transforms the 3D environment, personality, and unique voice."
+      },
+      {
+        title: "Seamless Tamil, Tanglish & Global Fluency",
+        prompt: "Present Pitch Slide 3: Highlight our zero-barrier multilingual AI capability—automatically understanding and replying in Tamil, Tanglish, English, Hindi, Japanese, and global languages."
+      },
+      {
+        title: "Real-World Applications",
+        prompt: "Present Pitch Slide 4: Pitch the real-world use cases of Kalai's interactive 3D AI system—interactive product demos, brand ambassadors, personal AI tutors, and smart assistants."
+      }
+    ];
+
+    let currentCharId = 'aether';
+    let selectedLanguage = 'auto';
+    let ttsEnabled = true;
+    let isSpeaking = false;
+    let isListening = false;
+    let liveLoopEnabled = false;
+    let isThinking = false;
+    let conversationHistory = [];
+
+    // =========================================================================
+    // 2. THREE.JS 3D ANIME HUMAN CHARACTER & DYNAMIC WORLD ENGINE
+    // =========================================================================
+    let scene, camera, renderer, clock;
+    let characterRoot, headGroup, torsoGroup, leftArmGroup, rightArmGroup, hipsGroup;
+    let leftEyeGroup, rightEyeGroup, leftEyelid, rightEyelid, mouthMesh, leftBrow, rightBrow;
+    let hairBackGroup, hairBangsGroup, auraRing1, auraRing2, platformGroup;
+    let ambientParticles, particleVelocities = [];
+    let raycaster = new THREE.Raycaster();
+    let pointer = new THREE.Vector2();
+
+    // Camera Orbit & Smooth Target Tracking
+    let targetLookX = 0, targetLookY = 0;
+    let currentLookX = 0, currentLookY = 0;
+    let camAzimuth = 0, camPolar = 0.08, camDistance = 4.3;
+    let isDragging = false, prevMouseX = 0, prevMouseY = 0, dragDistance = 0;
+
+    // Procedural Animation State Machine
+    let activeAction = 'idle'; // 'idle' | 'wave' | 'dance' | 'pitch' | 'think' | 'salute' | 'surprise' | 'nod'
+    let actionTimer = 0;
+    let actionDuration = 0;
+    let blinkTimer = 0;
+    let nextBlinkTime = 2.5;
+    let mouthOpenTarget = 0;
+    let currentMouthOpen = 0;
+
+    function initThreeJS() {
+      const container = document.getElementById('canvas-container');
+      clock = new THREE.Clock();
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(CHARACTERS.aether.bgTop);
+      scene.fog = new THREE.FogExp2(CHARACTERS.aether.bgFog, 0.065);
+
+      camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(0, 1.45, camDistance);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      container.appendChild(renderer.domElement);
+
+      setupLighting();
+      buildEnvironmentWorld();
+      buildAnimeHumanCharacter();
+      applyCharacterTheme('aether', true);
+
+      // Events
+      window.addEventListener('resize', onWindowResize);
+      container.addEventListener('pointerdown', onPointerDown);
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+      container.addEventListener('wheel', onWheel, { passive: true });
+    }
+
+    let keyLight, rimLight, fillLight, underGlowLight;
+    function setupLighting() {
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x1e293b, 0.85);
+      scene.add(hemiLight);
+
+      keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
+      keyLight.position.set(2.5, 4.5, 4);
+      scene.add(keyLight);
+
+      // Anime Rim Light (gives crisp glowing silhouette edge)
+      rimLight = new THREE.DirectionalLight(0x38bdf8, 1.8);
+      rimLight.position.set(-3, 3.2, -3.5);
+      scene.add(rimLight);
+
+      fillLight = new THREE.PointLight(0x818cf8, 1.1, 10);
+      fillLight.position.set(-2.5, 1.5, 2.5);
+      scene.add(fillLight);
+
+      underGlowLight = new THREE.PointLight(0x38bdf8, 1.5, 6);
+      underGlowLight.position.set(0, -0.4, 0.5);
+      scene.add(underGlowLight);
+    }
+
+    // Create Stylized Toon Gradient Texture for Anime Cel-Shading
+    function createToonGradientTexture() {
+      const data = new Uint8Array([
+        115, 115, 130, 255,
+        195, 195, 210, 255,
+        255, 255, 255, 255
+      ]);
+      const tex = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat);
+      tex.minFilter = THREE.NearestFilter;
+      tex.magFilter = THREE.NearestFilter;
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    const toonGradient = createToonGradientTexture();
+
+    function makeToonMat(colorHex, emissiveHex = 0x000000, emissiveIntensity = 0) {
+      return new THREE.MeshToonMaterial({
+        color: colorHex,
+        gradientMap: toonGradient,
+        emissive: emissiveHex,
+        emissiveIntensity: emissiveIntensity
+      });
+    }
+
+    let gridHelper, bgRings = [];
+    function buildEnvironmentWorld() {
+      // Holographic Stage Platform beneath Character
+      platformGroup = new THREE.Group();
+      platformGroup.position.y = -1.15;
+      scene.add(platformGroup);
+
+      const baseDisc = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.45, 1.65, 0.14, 48),
+        new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.7, roughness: 0.25 })
+      );
+      platformGroup.add(baseDisc);
+
+      auraRing1 = new THREE.Mesh(
+        new THREE.TorusGeometry(1.52, 0.022, 16, 64),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+      );
+      auraRing1.rotation.x = Math.PI / 2;
+      auraRing1.position.y = 0.08;
+      platformGroup.add(auraRing1);
+
+      auraRing2 = new THREE.Mesh(
+        new THREE.TorusGeometry(1.85, 0.012, 16, 64),
+        new THREE.MeshBasicMaterial({ color: 0x818cf8, transparent: true, opacity: 0.65 })
+      );
+      auraRing2.rotation.x = Math.PI / 2;
+      auraRing2.position.y = 0.02;
+      platformGroup.add(auraRing2);
+
+      // Cyber Floor Grid
+      gridHelper = new THREE.GridHelper(28, 28, 0x38bdf8, 0x1e293b);
+      gridHelper.position.y = -1.23;
+      gridHelper.material.transparent = true;
+      gridHelper.material.opacity = 0.28;
+      scene.add(gridHelper);
+
+      // Floating Background Holographic Rings / Structures
+      for (let i = 0; i < 3; i++) {
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(2.8 + i * 0.9, 0.015, 12, 80),
+          new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.22 - i * 0.05 })
+        );
+        ring.position.set(0, 1.2, -2.5 - i * 0.6);
+        scene.add(ring);
+        bgRings.push(ring);
+      }
+
+      // Ambient Floating Particles (Energy Orbs / Stars / Sakura Petals)
+      const particleCount = 160;
+      const geo = new THREE.BufferGeometry();
+      const positions = new Float32Array(particleCount * 3);
+      for (let i = 0; i < particleCount; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 14;
+        positions[i * 3 + 1] = Math.random() * 7 - 1.2;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 12 - 1;
+        particleVelocities.push({
+          y: 0.004 + Math.random() * 0.01,
+          x: (Math.random() - 0.5) * 0.006,
+          phase: Math.random() * Math.PI * 2
+        });
+      }
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const pMat = new THREE.PointsMaterial({
+        color: 0x38bdf8,
+        size: 0.075,
+        transparent: true,
+        opacity: 0.8
+      });
+      ambientParticles = new THREE.Points(geo, pMat);
+      scene.add(ambientParticles);
+    }
+
+    // Build Expressive Stylized 3D Human Anime Avatar
+    let skinMat, hairMat, hairAccentMat, outfitMat, trimMat, eyeIrisMat;
+    function buildAnimeHumanCharacter() {
+      characterRoot = new THREE.Group();
+      characterRoot.position.y = -0.15;
+      scene.add(characterRoot);
+
+      skinMat = makeToonMat(0xffdfc4);
+      hairMat = makeToonMat(0x1e293b);
+      hairAccentMat = makeToonMat(0x38bdf8, 0x38bdf8, 0.35);
+      outfitMat = makeToonMat(0x0f172a);
+      trimMat = makeToonMat(0x38bdf8, 0x38bdf8, 0.55);
+      eyeIrisMat = new THREE.MeshBasicMaterial({ color: 0x0ea5e9 });
+
+      // Hips / Lower Body Anchor
+      hipsGroup = new THREE.Group();
+      hipsGroup.position.y = 0.25;
+      characterRoot.add(hipsGroup);
+
+      // Stylized Legs
+      const legGeo = new THREE.CylinderGeometry(0.13, 0.095, 1.15, 20);
+      const leftLeg = new THREE.Mesh(legGeo, outfitMat);
+      leftLeg.position.set(-0.2, -0.68, 0);
+      hipsGroup.add(leftLeg);
+
+      const rightLeg = new THREE.Mesh(legGeo, outfitMat);
+      rightLeg.position.set(0.2, -0.68, 0);
+      hipsGroup.add(rightLeg);
+
+      // Cyber Boots with Glowing Trim
+      const bootGeo = new THREE.CylinderGeometry(0.11, 0.125, 0.32, 20);
+      const leftBoot = new THREE.Mesh(bootGeo, trimMat);
+      leftBoot.position.set(-0.2, -1.16, 0.03);
+      hipsGroup.add(leftBoot);
+
+      const rightBoot = new THREE.Mesh(bootGeo, trimMat);
+      rightBoot.position.set(0.2, -1.16, 0.03);
+      hipsGroup.add(rightBoot);
+
+      // Torso Group (Interactive Hitbox: "body")
+      torsoGroup = new THREE.Group();
+      torsoGroup.position.y = 0.05;
+      hipsGroup.add(torsoGroup);
+
+      // Sculpted Anime Jacket / Coat Torso
+      const chestGeo = new THREE.CylinderGeometry(0.32, 0.23, 0.78, 24);
+      const chestMesh = new THREE.Mesh(chestGeo, outfitMat);
+      chestMesh.position.y = 0.42;
+      chestMesh.scale.set(1.08, 1, 0.76);
+      chestMesh.userData = { hitPart: 'body' };
+      torsoGroup.add(chestMesh);
+
+      // Glowing Cyber Core / Tie Emblem on Chest
+      const coreDiamond = new THREE.Mesh(new THREE.OctahedronGeometry(0.085, 0), trimMat);
+      coreDiamond.position.set(0, 0.54, 0.25);
+      coreDiamond.scale.set(0.8, 1.3, 0.4);
+      coreDiamond.userData = { hitPart: 'body' };
+      torsoGroup.add(coreDiamond);
+
+      // Futuristic High Anime Collar
+      const collarGeo = new THREE.CylinderGeometry(0.25, 0.29, 0.2, 24, 1, true);
+      const collarMat = makeToonMat(0x0f172a, 0x38bdf8, 0.15);
+      collarMat.side = THREE.DoubleSide;
+      const collarMesh = new THREE.Mesh(collarGeo, collarMat);
+      collarMesh.position.set(0, 0.84, -0.02);
+      torsoGroup.add(collarMesh);
+
+      const collarRim = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.015, 12, 32), trimMat);
+      collarRim.rotation.x = Math.PI / 2;
+      collarRim.position.set(0, 0.94, -0.02);
+      torsoGroup.add(collarRim);
+
+      // Neck
+      const neckMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.12, 0.24, 20), skinMat);
+      neckMesh.position.set(0, 0.88, 0);
+      torsoGroup.add(neckMesh);
+
+      // Left & Right Articulated Anime Arms
+      leftArmGroup = createAnimeArm(-1);
+      leftArmGroup.position.set(-0.39, 0.74, 0);
+      torsoGroup.add(leftArmGroup);
+
+      rightArmGroup = createAnimeArm(1);
+      rightArmGroup.position.set(0.39, 0.74, 0);
+      torsoGroup.add(rightArmGroup);
+
+      // HEAD GROUP (Interactive Hitbox: "head")
+      headGroup = new THREE.Group();
+      headGroup.position.set(0, 1.02, 0);
+      torsoGroup.add(headGroup);
+
+      // Anime Head Shape (Smooth cranium + gentle anime chin taper)
+      const headGeo = new THREE.SphereGeometry(0.42, 32, 32);
+      const posAttr = headGeo.attributes.position;
+      for (let i = 0; i < posAttr.count; i++) {
+        let x = posAttr.getX(i);
+        let y = posAttr.getY(i);
+        let z = posAttr.getZ(i);
+        // Taper lower jaw for clean anime facial silhouette
+        if (y < 0) {
+          const factor = 1 + y * 0.65;
+          x *= Math.max(0.58, factor);
+          z *= Math.max(0.68, factor);
+          y *= 1.12;
+        }
+        posAttr.setXYZ(i, x, y, z);
+      }
+      headGeo.computeVertexNormals();
+
+      const headMesh = new THREE.Mesh(headGeo, skinMat);
+      headMesh.position.y = 0.36;
+      headMesh.userData = { hitPart: 'head' };
+      headGroup.add(headMesh);
+
+      // Subtle Anime Cheek Blush
+      const blushMat = new THREE.MeshBasicMaterial({ color: 0xf472b6, transparent: true, opacity: 0.32 });
+      const leftBlush = new THREE.Mesh(new THREE.CircleGeometry(0.055, 16), blushMat);
+      leftBlush.position.set(-0.21, 0.27, 0.365);
+      leftBlush.rotation.y = -0.35;
+      headGroup.add(leftBlush);
+
+      const rightBlush = new THREE.Mesh(new THREE.CircleGeometry(0.055, 16), blushMat);
+      rightBlush.position.set(0.21, 0.27, 0.365);
+      rightBlush.rotation.y = 0.35;
+      headGroup.add(rightBlush);
+
+      // Cute Small Anime Nose
+      const noseMesh = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.055, 12), skinMat);
+      noseMesh.position.set(0, 0.29, 0.415);
+      noseMesh.rotation.x = 0.35;
+      headGroup.add(noseMesh);
+
+      // Expressive Anime Eyes (Sclera, Glowing Iris, Pupil, Dual Starlight Highlights, Eyelids)
+      leftEyeGroup = createAnimeEye(-1);
+      leftEyeGroup.position.set(-0.155, 0.36, 0.365);
+      leftEyeGroup.rotation.y = -0.22;
+      headGroup.add(leftEyeGroup);
+
+      rightEyeGroup = createAnimeEye(1);
+      rightEyeGroup.position.set(0.155, 0.36, 0.365);
+      rightEyeGroup.rotation.y = 0.22;
+      headGroup.add(rightEyeGroup);
+
+      // Expressive Eyebrows
+      const browGeo = new THREE.BoxGeometry(0.13, 0.018, 0.02);
+      leftBrow = new THREE.Mesh(browGeo, hairMat);
+      leftBrow.position.set(-0.16, 0.47, 0.375);
+      leftBrow.rotation.set(0, -0.2, 0.08);
+      headGroup.add(leftBrow);
+
+      rightBrow = new THREE.Mesh(browGeo, hairMat);
+      rightBrow.position.set(0.16, 0.47, 0.375);
+      rightBrow.rotation.set(0, 0.2, -0.08);
+      headGroup.add(rightBrow);
+
+      // Animated Anime Mouth (Lip-Syncs during speech!)
+      const mouthGroup = new THREE.Group();
+      mouthGroup.position.set(0, 0.175, 0.388);
+      headGroup.add(mouthGroup);
+
+      const mouthGeo = new THREE.SphereGeometry(0.048, 16, 16);
+      mouthMesh = new THREE.Mesh(mouthGeo, new THREE.MeshBasicMaterial({ color: 0xbe123c }));
+      mouthMesh.scale.set(1.25, 0.25, 0.45);
+      mouthGroup.add(mouthMesh);
+
+      // Stylized Layered Anime Hair (Crown, Swept Bangs, Side Locks, Back Strands)
+      buildAnimeHair();
+
+      // Cybernetic AI Headset / Ear Fins
+      const earFinGeo = new THREE.BoxGeometry(0.05, 0.22, 0.14);
+      const leftEarFin = new THREE.Mesh(earFinGeo, trimMat);
+      leftEarFin.position.set(-0.42, 0.38, 0.02);
+      leftEarFin.rotation.z = 0.15;
+      headGroup.add(leftEarFin);
+
+      const rightEarFin = new THREE.Mesh(earFinGeo, trimMat);
+      rightEarFin.position.set(0.42, 0.38, 0.02);
+      rightEarFin.rotation.z = -0.15;
+      headGroup.add(rightEarFin);
+    }
+
+    function createAnimeArm(side) {
+      const armGroup = new THREE.Group();
+      
+      // Shoulder Pad
+      const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.115, 16, 16), trimMat);
+      shoulder.userData = { hitPart: 'body' };
+      armGroup.add(shoulder);
+
+      // Upper & Forearm
+      const armCyl = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.068, 0.58, 16), outfitMat);
+      armCyl.position.set(side * 0.04, -0.3, 0);
+      armCyl.rotation.z = side * 0.14;
+      armCyl.userData = { hitPart: 'body' };
+      armGroup.add(armCyl);
+
+      // Stylized Hand
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 16), skinMat);
+      hand.position.set(side * 0.085, -0.61, 0.02);
+      hand.scale.set(0.9, 1.15, 0.75);
+      armGroup.add(hand);
+
+      return armGroup;
+    }
+
+    function createAnimeEye(side) {
+      const eyeContainer = new THREE.Group();
+
+      // White Sclera Base
+      const sclera = new THREE.Mesh(
+        new THREE.SphereGeometry(0.082, 20, 20),
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
+      );
+      sclera.scale.set(1.05, 1.18, 0.45);
+      eyeContainer.add(sclera);
+
+      // Moving Pupil + Iris Group (tracks user cursor!)
+      const irisGroup = new THREE.Group();
+      irisGroup.position.z = 0.026;
+      eyeContainer.add(irisGroup);
+
+      const iris = new THREE.Mesh(new THREE.CircleGeometry(0.052, 24), eyeIrisMat);
+      iris.scale.set(0.95, 1.18, 1);
+      irisGroup.add(iris);
+
+      const pupil = new THREE.Mesh(
+        new THREE.CircleGeometry(0.025, 20),
+        new THREE.MeshBasicMaterial({ color: 0x090d16 })
+      );
+      pupil.position.z = 0.002;
+      pupil.scale.set(0.95, 1.15, 1);
+      irisGroup.add(pupil);
+
+      // Classic Anime Eye Sparkle Highlights
+      const highlightBig = new THREE.Mesh(
+        new THREE.CircleGeometry(0.016, 12),
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
+      );
+      highlightBig.position.set(-0.018, 0.022, 0.004);
+      irisGroup.add(highlightBig);
+
+      const highlightSmall = new THREE.Mesh(
+        new THREE.CircleGeometry(0.008, 12),
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
+      );
+      highlightSmall.position.set(0.016, -0.018, 0.004);
+      irisGroup.add(highlightSmall);
+
+      // Upper Eyelash Line
+      const lash = new THREE.Mesh(
+        new THREE.BoxGeometry(0.165, 0.022, 0.03),
+        new THREE.MeshBasicMaterial({ color: 0x0f172a })
+      );
+      lash.position.set(0, 0.082, 0.02);
+      lash.rotation.z = side * -0.08;
+      eyeContainer.add(lash);
+
+      // Blinking Eyelid
+      const eyelid = new THREE.Mesh(
+        new THREE.SphereGeometry(0.086, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.52),
+        skinMat
+      );
+      eyelid.scale.set(1.08, 1.2, 0.5);
+      eyelid.rotation.x = -Math.PI * 0.48; // Open by default
+      eyeContainer.add(eyelid);
+
+      if (side === -1) leftEyelid = eyelid;
+      else rightEyelid = eyelid;
+
+      eyeContainer.userData.irisGroup = irisGroup;
+      return eyeContainer;
+    }
+
+    function buildAnimeHair() {
+      // Hair Cap / Crown
+      const crown = new THREE.Mesh(
+        new THREE.SphereGeometry(0.455, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.62),
+        hairMat
+      );
+      crown.position.set(0, 0.39, -0.02);
+      crown.rotation.x = -0.18;
+      crown.userData = { hitPart: 'head' };
+      headGroup.add(crown);
+
+      // Swept Front Anime Bangs (Multiple sculpted spikes)
+      hairBangsGroup = new THREE.Group();
+      hairBangsGroup.position.set(0, 0.58, 0.36);
+      headGroup.add(hairBangsGroup);
+
+      const bangSpecs = [
+        { x: -0.22, y: -0.04, z: -0.05, rz: 0.25, rx: 0.35, sx: 0.09, sy: 0.26, accent: false },
+        { x: -0.11, y: -0.05, z: 0.02, rz: 0.12, rx: 0.28, sx: 0.085, sy: 0.28, accent: true },
+        { x: 0.01,  y: -0.06, z: 0.03, rz: -0.06, rx: 0.26, sx: 0.095, sy: 0.30, accent: false },
+        { x: 0.13,  y: -0.05, z: 0.01, rz: -0.18, rx: 0.30, sx: 0.085, sy: 0.27, accent: true },
+        { x: 0.24,  y: -0.03, z: -0.06, rz: -0.30, rx: 0.36, sx: 0.09, sy: 0.25, accent: false }
+      ];
+
+      bangSpecs.forEach(b => {
+        const cone = new THREE.Mesh(
+          new THREE.ConeGeometry(b.sx, b.sy, 12),
+          b.accent ? hairAccentMat : hairMat
+        );
+        cone.position.set(b.x, b.y, b.z);
+        cone.rotation.set(b.rx, 0, b.rz);
+        cone.scale.set(1, 1, 0.45);
+        cone.userData = { hitPart: 'head' };
+        hairBangsGroup.add(cone);
+      });
+
+      // Back Spiky / Flowing Anime Hair Locks
+      hairBackGroup = new THREE.Group();
+      hairBackGroup.position.set(0, 0.36, -0.34);
+      headGroup.add(hairBackGroup);
+
+      for (let i = -3; i <= 3; i++) {
+        const spike = new THREE.Mesh(
+          new THREE.ConeGeometry(0.13, 0.56, 12),
+          i % 2 === 0 ? hairMat : hairAccentMat
+        );
+        spike.position.set(i * 0.11, -0.05 - Math.abs(i) * 0.02, -0.04);
+        spike.rotation.set(-0.22, 0, i * -0.14);
+        spike.scale.set(1, 1, 0.55);
+        hairBackGroup.add(spike);
+      }
+    }
+
+    // =========================================================================
+    // 3. CHARACTER & WORLD THEME SWITCHER
+    // =========================================================================
+    function applyCharacterTheme(charId, silent = false) {
+      const cfg = CHARACTERS[charId];
+      if (!cfg) return;
+      currentCharId = charId;
+
+      // Update 3D Materials
+      skinMat.color.setHex(cfg.skinColor);
+      hairMat.color.setHex(cfg.hairColor);
+      hairAccentMat.color.setHex(cfg.hairHighlight);
+      hairAccentMat.emissive.setHex(cfg.hairHighlight);
+      eyeIrisMat.color.setHex(cfg.eyeColor);
+      outfitMat.color.setHex(cfg.outfitPrimary);
+      trimMat.color.setHex(cfg.outfitTrim);
+      trimMat.emissive.setHex(cfg.outfitTrim);
+
+      // Update 3D World Background, Fog, Lights & Particles
+      scene.background.setHex(cfg.bgTop);
+      scene.fog.color.setHex(cfg.bgFog);
+      rimLight.color.setHex(cfg.accentThree);
+      underGlowLight.color.setHex(cfg.accentThree);
+      auraRing1.material.color.setHex(cfg.accentThree);
+      auraRing2.material.color.setHex(cfg.secondaryThree);
+      gridHelper.material.color.setHex(cfg.accentThree);
+      ambientParticles.material.color.setHex(cfg.accentThree);
+      bgRings.forEach(r => r.material.color.setHex(cfg.accentThree));
+
+      // Update UI Styling & Labels
+      document.getElementById('persona-subtitle').textContent = cfg.subtitle;
+      document.getElementById('speaker-name').textContent = cfg.name;
+      document.getElementById('speaker-name').style.color = cfg.accentHex;
+      document.getElementById('eq-visualizer').style.color = cfg.accentHex;
+      if (hairBangsGroup) hairBangsGroup.visible = cfg.type !== 'robot';
+      if (hairBackGroup) hairBackGroup.visible = cfg.type !== 'robot';
+      if (mouthMesh) {
+        mouthMesh.material.color.setHex(cfg.type === 'robot' ? 0x22d3ee : 0xbe123c);
+        mouthMesh.scale.set(cfg.type === 'robot' ? 1.6 : 1.25, 0.25, cfg.type === 'robot' ? 0.9 : 0.45);
+      }
+
+      // Update Character Tab Active State
+      ['aether', 'kira', 'unitx'].forEach(id => {
+        const btn = document.getElementById(`btn-char-${id}`);
+        if (id === charId) {
+          btn.className = 'char-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 bg-white/15 text-white border border-white/30 shadow-sm';
+        } else {
+          btn.className = 'char-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1.5 text-slate-300 hover:text-white';
+        }
+      });
+
+      if (!silent) {
+        triggerCharacterAction('wave', false);
+        setDialogueAndSpeak(cfg.greeting);
+      }
+    }
+
+    function switchCharacter(charId) {
+      if (charId === currentCharId) {
+        triggerCharacterAction('wave', true);
+        return;
+      }
+      conversationHistory = []; // Fresh persona context
+      applyCharacterTheme(charId, false);
+      showToast(`Switched to ${CHARACTERS[charId].name}'s World`);
+    }
+
+    // =========================================================================
+    // 4. PROCEDURAL ANIMATION LOOP & TALKING TOM INTERACTIONS
+    // =========================================================================
+    function triggerCharacterAction(actionName, announce = false) {
+      activeAction = actionName;
+      actionTimer = 0;
+
+      const durations = {
+        wave: 2.2,
+        dance: 3.6,
+        pitch: 2.8,
+        think: 2.6,
+        salute: 2.2,
+        surprise: 1.4,
+        nod: 1.5
+      };
+      actionDuration = durations[actionName] || 2.0;
+
+      if (announce) {
+        const phrases = {
+          wave: "Hey there! Great to see you! What should we explore next?",
+          dance: "Let's celebrate! Check out these moves!",
+          pitch: "Here is the big vision: intelligent, multilingual 3D AI humans built for everyone!",
+          think: "Hmm, analyzing all possibilities... ask me anything complex!",
+          salute: "Ready at your command! Tell me what you need."
+        };
+        if (phrases[actionName]) {
+          setDialogueAndSpeak(phrases[actionName]);
+        }
+      }
+    }
+
+    function onPointerDown(e) {
+      isDragging = true;
+      dragDistance = 0;
+      prevMouseX = e.clientX;
+      prevMouseY = e.clientY;
+    }
+
+    function onPointerMove(e) {
+      // Normalized mouse/touch coordinates (-1 to +1) for eye & head tracking
+      const nx = (e.clientX / window.innerWidth) * 2 - 1;
+      const ny = -(e.clientY / window.innerHeight) * 2 + 1;
+      targetLookX = Math.max(-1, Math.min(1, nx));
+      targetLookY = Math.max(-1, Math.min(1, ny));
+
+      if (isDragging) {
+        const dx = e.clientX - prevMouseX;
+        const dy = e.clientY - prevMouseY;
+        dragDistance += Math.hypot(dx, dy);
+        camAzimuth -= dx * 0.0065;
+        camAzimuth = Math.max(-1.1, Math.min(1.1, camAzimuth));
+        camPolar += dy * 0.0045;
+        camPolar = Math.max(-0.25, Math.min(0.55, camPolar));
+        prevMouseX = e.clientX;
+        prevMouseY = e.clientY;
+      }
+    }
+
+    function onPointerUp(e) {
+      isDragging = false;
+      // If user tapped/clicked (not dragged), check if they tapped the 3D character!
+      if (dragDistance < 8 && characterRoot) {
+        pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+        const hits = raycaster.intersectObjects(characterRoot.children, true);
+        if (hits.length > 0) {
+          const hitPart = hits[0].object.userData.hitPart || 'head';
+          handleCharacterTap(hitPart);
+        }
+      }
+    }
+
+    function onWheel(e) {
+      camDistance += e.deltaY * 0.0025;
+      camDistance = Math.max(2.6, Math.min(6.2, camDistance));
+    }
+
+    function handleCharacterTap(part) {
+      if (part === 'head') {
+        triggerCharacterAction('surprise', false);
+        const headQuips = {
+          aether: [
+            "Haha! Careful with the hair—my neural circuits are supercharged today!",
+            "Hey! That tickles! Ready to hear my AI startup pitch or test my language skills?",
+            "Boop! Yep, I'm live and listening—ask me anything in any language!"
+          ],
+          kira: [
+            "Eep! You tapped my antenna! Systems at 100% cheerful energy!",
+            "Hehe, hello there! Want me to do a dance or translate something cool?",
+            "Boop! Kira online and ready for your next command!"
+          ],
+          unitx: [
+            "Alert: Cranial sensor tapped. Humor subroutines activated!",
+            "Boop detected! Titanium systems remain fully operational.",
+            "Unit-X audio-visual sensors locked on you. State your command!"
+          ]
+        };
+        const list = headQuips[currentCharId];
+        setDialogueAndSpeak(list[Math.floor(Math.random() * list.length)]);
+      } else {
+        triggerCharacterAction('salute', false);
+        const bodyQuips = [
+          "All holographic systems nominal! Ask me any question or tell me to perform a move!",
+          "Ready when you are! Try speaking to me in Tamil, English, Hindi, or Japanese!",
+          "Let's build something extraordinary together!"
+        ];
+        setDialogueAndSpeak(bodyQuips[Math.floor(Math.random() * bodyQuips.length)]);
+      }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05);
+      const elapsed = clock.getElapsedTime();
+
+      // 1. Smooth Camera Orbit Interpolation
+      const targetCamX = Math.sin(camAzimuth) * camDistance;
+      const targetCamZ = Math.cos(camAzimuth) * camDistance;
+      const targetCamY = 1.38 + Math.sin(camPolar) * 1.4;
+      camera.position.x += (targetCamX - camera.position.x) * 0.08;
+      camera.position.y += (targetCamY - camera.position.y) * 0.08;
+      camera.position.z += (targetCamZ - camera.position.z) * 0.08;
+      camera.lookAt(0, 1.15, 0);
+
+      // 2. Eye & Head Cursor Tracking
+      currentLookX += (targetLookX - currentLookX) * 0.1;
+      currentLookY += (targetLookY - currentLookY) * 0.1;
+
+      if (headGroup) {
+        const baseHeadYaw = currentLookX * 0.32;
+        const baseHeadPitch = -currentLookY * 0.22;
+
+        // Pupils track slightly further than head
+        if (leftEyeGroup?.userData.irisGroup) {
+          leftEyeGroup.userData.irisGroup.position.x = currentLookX * 0.022;
+          leftEyeGroup.userData.irisGroup.position.y = currentLookY * 0.022;
+        }
+        if (rightEyeGroup?.userData.irisGroup) {
+          rightEyeGroup.userData.irisGroup.position.x = currentLookX * 0.022;
+          rightEyeGroup.userData.irisGroup.position.y = currentLookY * 0.022;
+        }
+
+        // 3. Natural Blinking Animation
+        blinkTimer += dt;
+        if (blinkTimer >= nextBlinkTime) {
+          const blinkProgress = (blinkTimer - nextBlinkTime) / 0.16;
+          if (blinkProgress <= 1) {
+            const closeAmt = Math.sin(blinkProgress * Math.PI);
+            const lidAngle = -Math.PI * 0.48 * (1 - closeAmt);
+            if (leftEyelid) leftEyelid.rotation.x = lidAngle;
+            if (rightEyelid) rightEyelid.rotation.x = lidAngle;
+          } else {
+            blinkTimer = 0;
+            nextBlinkTime = 2.2 + Math.random() * 3.2;
+          }
+        }
+
+        // 4. Lip-Sync Mouth Movement when Speaking
+        if (isSpeaking) {
+          mouthOpenTarget = 0.25 + Math.abs(Math.sin(elapsed * 16)) * 0.65 + Math.abs(Math.cos(elapsed * 23)) * 0.35;
+        } else {
+          mouthOpenTarget = 0.22;
+        }
+        currentMouthOpen += (mouthOpenTarget - currentMouthOpen) * 0.28;
+        if (mouthMesh) {
+          mouthMesh.scale.y = currentMouthOpen;
+          mouthMesh.scale.x = isSpeaking ? 1.1 + Math.sin(elapsed * 12) * 0.15 : 1.25;
+        }
+
+        // 5. Idle Breathing + Expressive Action State Machine
+        const breath = Math.sin(elapsed * 2.2);
+        hipsGroup.position.y = 0.25 + breath * 0.015;
+        torsoGroup.rotation.x = breath * 0.02;
+
+        // Reset defaults gently
+        let targetRightArmZ = 0, targetRightArmX = 0;
+        let targetLeftArmZ = 0, targetLeftArmX = 0;
+        let targetTorsoY = 0, targetHipsRotY = 0;
+        let extraHeadZ = Math.sin(elapsed * 1.4) * 0.035;
+        let extraHeadX = 0;
+
+        if (activeAction !== 'idle') {
+          actionTimer += dt;
+          const p = Math.min(1, actionTimer / actionDuration);
+
+          if (activeAction === 'wave') {
+            targetRightArmZ = 2.35;
+            targetRightArmX = -0.25;
+            rightArmGroup.rotation.z = targetRightArmZ + Math.sin(elapsed * 11) * 0.28;
+            extraHeadZ = 0.12;
+          } else if (activeAction === 'dance') {
+            hipsGroup.position.y = 0.25 + Math.abs(Math.sin(elapsed * 7)) * 0.09;
+            targetHipsRotY = Math.sin(elapsed * 3.5) * 0.25;
+            targetLeftArmZ = -1.6 + Math.sin(elapsed * 7) * 0.5;
+            targetRightArmZ = 1.6 + Math.cos(elapsed * 7) * 0.5;
+            extraHeadZ = Math.sin(elapsed * 7) * 0.14;
+          } else if (activeAction === 'pitch') {
+            targetRightArmZ = 0.85 + Math.sin(elapsed * 4) * 0.2;
+            targetRightArmX = -0.75;
+            targetLeftArmZ = -0.55;
+            targetLeftArmX = -0.45;
+            extraHeadX = Math.sin(elapsed * 4) * 0.06;
+          } else if (activeAction === 'think') {
+            targetRightArmZ = 1.35;
+            targetRightArmX = -1.15;
+            extraHeadZ = 0.16;
+            extraHeadX = -0.08;
+          } else if (activeAction === 'salute') {
+            targetRightArmZ = 2.15;
+            targetRightArmX = -0.65;
+            extraHeadX = 0.12;
+          } else if (activeAction === 'surprise') {
+            hipsGroup.position.y = 0.25 + Math.sin(p * Math.PI) * 0.11;
+            targetLeftArmZ = -0.65 * Math.sin(p * Math.PI);
+            targetRightArmZ = 0.65 * Math.sin(p * Math.PI);
+            extraHeadX = -0.15 * Math.sin(p * Math.PI);
+          }
+
+          if (p >= 1) {
+            activeAction = 'idle';
+          }
+        }
+
+        // Smooth Limb Interpolation
+        if (activeAction !== 'wave') {
+          rightArmGroup.rotation.z += (targetRightArmZ - rightArmGroup.rotation.z) * 0.12;
+        }
+        rightArmGroup.rotation.x += (targetRightArmX - rightArmGroup.rotation.x) * 0.12;
+        leftArmGroup.rotation.z += (targetLeftArmZ - leftArmGroup.rotation.z) * 0.12;
+        leftArmGroup.rotation.x += (targetLeftArmX - leftArmGroup.rotation.x) * 0.12;
+        hipsGroup.rotation.y += (targetHipsRotY - hipsGroup.rotation.y) * 0.12;
+
+        headGroup.rotation.y = baseHeadYaw;
+        headGroup.rotation.x = baseHeadPitch + extraHeadX;
+        headGroup.rotation.z = extraHeadZ;
+      }
+
+      // 6. Animate World Rings & Ambient Particles
+      if (auraRing1) auraRing1.rotation.z = elapsed * 0.4;
+      if (auraRing2) auraRing2.rotation.z = -elapsed * 0.25;
+      bgRings.forEach((r, idx) => {
+        r.rotation.z = elapsed * (0.08 + idx * 0.04) * (idx % 2 === 0 ? 1 : -1);
+      });
+
+      if (ambientParticles) {
+        const pos = ambientParticles.geometry.attributes.position.array;
+        for (let i = 0; i < particleVelocities.length; i++) {
+          const v = particleVelocities[i];
+          if (currentCharId === 'unitx') {
+            // Foundry sparks rise rapidly with slight jitter
+            pos[i * 3 + 1] += v.y * 1.65;
+            pos[i * 3] += Math.sin(elapsed * 3 + v.phase) * 0.006;
+            if (pos[i * 3 + 1] > 5.8) pos[i * 3 + 1] = -1.2;
+          } else {
+            // Cyber energy particles float upward
+            pos[i * 3 + 1] += v.y;
+            pos[i * 3] += Math.cos(elapsed + v.phase) * 0.003;
+            if (pos[i * 3 + 1] > 5.8) pos[i * 3 + 1] = -1.2;
+          }
+        }
+        ambientParticles.geometry.attributes.position.needsUpdate = true;
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // =========================================================================
+    // 5. GEMINI AI BRAIN (MULTILINGUAL AUTO-DETECT + ACTION EXECUTION)
+    // =========================================================================
+    async function callGeminiWithRetry(payload, maxRetries = 3) {
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+      let delay = 1000;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return await res.json();
+        } catch (err) {
+          if (attempt === maxRetries) throw err;
+          await new Promise(r => setTimeout(r, delay));
+          delay *= 2;
+        }
+      }
+    }
+
+    async function processUserMessage(userText) {
+      if (!userText || !userText.trim() || isThinking) return;
+      const cleanText = userText.trim();
+
+      addMessageToLog('user', cleanText);
+      setThinkingState(true);
+
+      const activeChar = CHARACTERS[currentCharId];
+      const langInstruction = selectedLanguage === 'auto'
+        ? `CRITICAL MULTILINGUAL RULE: Automatically detect the language the user used (e.g. Tamil, Tanglish [Tamil written in English letters], English, Hindi, Japanese, Spanish, French, etc.) and reply FLUENTLY in that EXACT SAME language and script/style! If the user writes in Tanglish, reply in natural conversational Tanglish. If Tamil script, reply in Tamil script.`
+        : `CRITICAL LANGUAGE RULE: Reply strictly in ${selectedLanguage} regardless of input language.`;
+
+      const systemPrompt = `${activeChar.personaPrompt}
+
+${langInstruction}
+
+INTERACTIVE EMBODIED AI RULES:
+- You are an embodied 3D anime human character on screen. Keep responses concise, natural, conversational, and expressive (2 to 4 sentences max so spoken dialogue feels snappy and alive!).
+- If the user asks about Kalai's AI project or pitch, present it enthusiastically as an innovative 3D embodied multilingual AI platform.
+- Choose the best physical 3D animation ('action') for your response:
+  - 'wave' for greetings/farewells
+  - 'dance' when asked to dance, celebrate, or do something fun
+  - 'pitch' when explaining AI vision, technology, or startup ideas
+  - 'think' when answering deep/analytical questions
+  - 'salute' when acknowledging commands or showing respect
+  - 'idle' for normal conversation
+- If the user explicitly asks to switch character/theme (e.g., to Aether, Kira, or Unit-X), set 'switchCharacterTo' to 'aether', 'kira', or 'unitx', otherwise 'none'.`;
+
+      conversationHistory.push({ role: 'user', parts: [{ text: cleanText }] });
+      // Keep last 10 turns for snappy context
+      const recentHistory = conversationHistory.slice(-10);
+
+      const payload = {
+        contents: recentHistory,
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "OBJECT",
+            properties: {
+              reply: { type: "STRING", description: "Your natural conversational reply in the user's language." },
+              detectedLanguageCode: { type: "STRING", description: "BCP-47 language code for TTS voice (e.g., 'en-US', 'ta-IN', 'hi-IN', 'ja-JP', 'es-ES', 'fr-FR'). Use 'ta-IN' or 'en-IN' for Tanglish." },
+              detectedLanguageLabel: { type: "STRING", description: "Short human label like 'Tamil', 'Tanglish', 'English', 'Hindi', 'Japanese'." },
+              action: { type: "STRING", enum: ["idle", "wave", "dance", "pitch", "think", "salute"] },
+              switchCharacterTo: { type: "STRING", enum: ["none", "aether", "kira", "unitx"] }
+            },
+            required: ["reply", "detectedLanguageCode", "detectedLanguageLabel", "action", "switchCharacterTo"]
+          }
+        }
+      };
+
+      try {
+        const result = await callGeminiWithRetry(payload);
+        const rawJson = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const parsed = JSON.parse(rawJson);
+
+        conversationHistory.push({ role: 'model', parts: [{ text: parsed.reply }] });
+        setThinkingState(false);
+
+        // Update Detected Language Badge
+        if (parsed.detectedLanguageLabel) {
+          document.getElementById('detected-lang-badge').textContent = parsed.detectedLanguageLabel;
+        }
+
+        // Switch Character if requested by user naturally in chat
+        if (parsed.switchCharacterTo && parsed.switchCharacterTo !== 'none' && parsed.switchCharacterTo !== currentCharId) {
+          applyCharacterTheme(parsed.switchCharacterTo, true);
+          showToast(`Switched to ${CHARACTERS[parsed.switchCharacterTo].name}`);
+        }
+
+        // Trigger 3D Character Body Animation
+        if (parsed.action && parsed.action !== 'idle') {
+          triggerCharacterAction(parsed.action, false);
+        }
+
+        addMessageToLog('ai', parsed.reply);
+        setDialogueAndSpeak(parsed.reply, parsed.detectedLanguageCode);
+
+      } catch (err) {
+        setThinkingState(false);
+        const fallback = "I'm right here! Let's try that again—ask me anything or tap my mic to speak.";
+        setDialogueAndSpeak(fallback, 'en-US');
+      }
+    }
+
+    function setThinkingState(thinking) {
+      isThinking = thinking;
+      const statusPill = document.getElementById('status-pill');
+      const dialogueEl = document.getElementById('ai-dialogue-text');
+      if (thinking) {
+        statusPill.textContent = 'Thinking...';
+        statusPill.className = 'text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30';
+        dialogueEl.innerHTML = `<span class="inline-flex items-center gap-1.5 text-slate-300 italic"><span class="w-2 h-2 rounded-full bg-sky-400 animate-ping"></span>Thinking...</span>`;
+      } else {
+        statusPill.textContent = 'Live 3D AI';
+        statusPill.className = 'text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+      }
+    }
+
+    // =========================================================================
+    // 6. TEXT-TO-SPEECH (LIP-SYNCED) & SPEECH RECOGNITION (VOICE INPUT)
+    // =========================================================================
+    let availableVoices = [];
+    let robotAudioCtx = null;
+    let robotSynthNodes = null;
+
+    function loadBrowserVoices() {
+      if ('speechSynthesis' in window) {
+        availableVoices = window.speechSynthesis.getVoices();
+      }
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = loadBrowserVoices;
+      loadBrowserVoices();
+    }
+
+    function selectBestVoiceForCharacter(charCfg, targetLang) {
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices || voices.length === 0) return null;
+      const langPrefix = targetLang.split('-')[0].toLowerCase();
+      let langVoices = voices.filter(v => v.lang.toLowerCase().startsWith(langPrefix));
+      if (langVoices.length === 0) langVoices = voices;
+
+      const maleKeywords = ['male', 'david', 'mark', 'guy', 'ravi', 'daniel', 'james', 'george', 'alex', 'fred', 'microsoft', 'rishabh'];
+      const femaleKeywords = ['female', 'zira', 'hazel', 'susan', 'samantha', 'victoria', 'karen', 'moira', 'tessa', 'swara', 'heera', 'veena', 'kalpana', 'aria', 'jenny', 'natasha', 'shruti', 'pallavi'];
+
+      if (charCfg.voiceGender === 'male') {
+        return langVoices.find(v => maleKeywords.some(k => v.name.toLowerCase().includes(k)) && !v.name.toLowerCase().includes('female'))
+          || voices.find(v => maleKeywords.some(k => v.name.toLower().includes(k)) && !v.name.toLowerCase().includes('female'))
+          || langVoices[0] || voices[0];
+      }
+      if (charCfg.voiceGender === 'female') {
+        return langVoices.find(v => femaleKeywords.some(k => v.name.toLowerCase().includes(k)))
+          || voices.find(v => femaleKeywords.some(k => v.name.toLowerCase().includes(k)))
+          || langVoices[0] || voices[0];
+      }
+      const robotKeywords = ['fred', 'zarvox', 'trinoids', 'albert', 'bahh', 'daniel', 'mark', 'david'];
+      return voices.find(v => robotKeywords.some(k => v.name.toLowerCase().includes(k))) || langVoices[0] || voices[0];
+    }
+
+    function startRobotVoiceOverlay() {
+      try {
+        if (!robotAudioCtx) robotAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (robotAudioCtx.state === 'suspended') robotAudioCtx.resume();
+        stopRobotVoiceOverlay();
+
+        const carrierOsc = robotAudioCtx.createOscillator();
+        const modOsc = robotAudioCtx.createOscillator();
+        const modGain = robotAudioCtx.createGain();
+        const filter = robotAudioCtx.createBiquadFilter();
+        const masterGain = robotAudioCtx.createGain();
+
+        carrierOsc.type = 'sawtooth';
+        carrierOsc.frequency.value = 92;
+        modOsc.type = 'square';
+        modOsc.frequency.value = 28;
+        modGain.gain.value = 45;
+        filter.type = 'bandpass';
+        filter.frequency.value = 620;
+        filter.Q.value = 3.5;
+        masterGain.gain.setValueAtTime(0.028, robotAudioCtx.currentTime);
+
+        modOsc.connect(modGain);
+        modGain.connect(carrierOsc.frequency);
+        carrierOsc.connect(filter);
+        filter.connect(masterGain);
+        masterGain.connect(robotAudioCtx.destination);
+        carrierOsc.start();
+        modOsc.start();
+
+        const pulseInterval = setInterval(() => {
+          if (!robotAudioCtx || !masterGain) return;
+          const syllableAmp = 0.012 + Math.random() * 0.028;
+          masterGain.gain.setTargetAtTime(syllableAmp, robotAudioCtx.currentTime, 0.03);
+        }, 95);
+        robotSynthNodes = { carrierOsc, modOsc, pulseInterval };
+      } catch (e) {
+        // Ignore browser restrictions on Web Audio.
+      }
+    }
+
+    function stopRobotVoiceOverlay() {
+      if (!robotSynthNodes) return;
+      try {
+        clearInterval(robotSynthNodes.pulseInterval);
+        robotSynthNodes.carrierOsc.stop();
+        robotSynthNodes.modOsc.stop();
+      } catch (e) {}
+      robotSynthNodes = null;
+    }
+
+    function testCurrentVoice() {
+      const cfg = CHARACTERS[currentCharId];
+      triggerCharacterAction('wave', false);
+      setDialogueAndSpeak(cfg.voiceSample, 'en-US');
+      showToast(`Testing ${cfg.name}'s Voice`);
+    }
+
+    function setDialogueAndSpeak(text, langCode = 'en-US') {
+      const dialogueEl = document.getElementById('ai-dialogue-text');
+      dialogueEl.textContent = text;
+
+      if (!ttsEnabled || !('speechSynthesis' in window)) {
+        // Simulate brief lip-sync animation even if muted
+        isSpeaking = true;
+        document.getElementById('eq-visualizer').classList.add('speaking');
+        setTimeout(() => {
+          isSpeaking = false;
+          document.getElementById('eq-visualizer').classList.remove('speaking');
+          if (liveLoopEnabled) startVoiceListening();
+        }, Math.min(3500, text.length * 45));
+        return;
+      }
+
+      window.speechSynthesis.cancel();
+      stopRobotVoiceOverlay();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const charCfg = CHARACTERS[currentCharId];
+
+      // Determine target language for voice
+      let targetLang = langCode;
+      if (selectedLanguage !== 'auto' && selectedLanguage !== 'tanglish') {
+        targetLang = selectedLanguage;
+      } else if (selectedLanguage === 'tanglish') {
+        targetLang = 'en-IN';
+      }
+
+      utterance.lang = targetLang;
+      utterance.pitch = charCfg.voicePitch;
+      utterance.rate = charCfg.voiceRate;
+
+      const matchedVoice = selectBestVoiceForCharacter(charCfg, targetLang);
+      if (matchedVoice) utterance.voice = matchedVoice;
+
+      utterance.onstart = () => {
+        isSpeaking = true;
+        document.getElementById('eq-visualizer').classList.add('speaking');
+        if (charCfg.type === 'robot') startRobotVoiceOverlay();
+      };
+
+      utterance.onend = () => {
+        isSpeaking = false;
+        stopRobotVoiceOverlay();
+        document.getElementById('eq-visualizer').classList.remove('speaking');
+        if (liveLoopEnabled) {
+          setTimeout(() => startVoiceListening(), 350);
+        }
+      };
+
+      utterance.onerror = () => {
+        isSpeaking = false;
+        stopRobotVoiceOverlay();
+        document.getElementById('eq-visualizer').classList.remove('speaking');
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function toggleSpeechOutput() {
+      ttsEnabled = !ttsEnabled;
+      const icon = document.getElementById('icon-tts');
+      if (ttsEnabled) {
+        icon.setAttribute('data-lucide', 'volume-2');
+        showToast('AI Voice Output Enabled');
+      } else {
+        window.speechSynthesis?.cancel();
+        stopRobotVoiceOverlay();
+        isSpeaking = false;
+        document.getElementById('eq-visualizer').classList.remove('speaking');
+        icon.setAttribute('data-lucide', 'volume-x');
+        showToast('AI Voice Muted');
+      }
+      lucide.createIcons();
+    }
+
+    // Speech Recognition Setup
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        isListening = true;
+        const btnMic = document.getElementById('btn-mic');
+        btnMic.classList.add('mic-pulse');
+        document.getElementById('status-pill').textContent = 'Listening...';
+        document.getElementById('status-pill').className = 'text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-rose-500/25 text-rose-300 border border-rose-400/40';
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        document.getElementById('user-input').value = transcript;
+
+        if (event.results[event.results.length - 1].isFinal) {
+          document.getElementById('user-input').value = '';
+          processUserMessage(transcript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        isListening = false;
+        document.getElementById('btn-mic').classList.remove('mic-pulse');
+        if (event.error !== 'no-speech') {
+          showToast(`Mic notice: ${event.error}`);
+        }
+        if (!isThinking) {
+          document.getElementById('status-pill').textContent = 'Live 3D AI';
+          document.getElementById('status-pill').className = 'text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+        }
+      };
+
+      recognition.onend = () => {
+        isListening = false;
+        document.getElementById('btn-mic').classList.remove('mic-pulse');
+        if (!isThinking) {
+          document.getElementById('status-pill').textContent = 'Live 3D AI';
+          document.getElementById('status-pill').className = 'text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+        }
+      };
+    }
+
+    function startVoiceListening() {
+      if (!recognition) {
+        showToast('Voice mic not supported in this browser—type below!');
+        return;
+      }
+      if (isListening) return;
+      window.speechSynthesis?.cancel();
+      isSpeaking = false;
+
+      // Configure recognition language hint
+      if (selectedLanguage === 'auto' || selectedLanguage === 'tanglish') {
+        recognition.lang = 'en-IN'; // Recognizes English + Indian accents/Tanglish well
+      } else {
+        recognition.lang = selectedLanguage;
+      }
+
+      try {
+        recognition.start();
+      } catch (e) {
+        // Ignore already started error
+      }
+    }
+
+    function toggleVoiceRecognition() {
+      if (!recognition) {
+        showToast('Speech recognition unavailable in this browser');
+        return;
+      }
+      if (isListening) {
+        recognition.stop();
+      } else {
+        startVoiceListening();
+      }
+    }
+
+    function toggleLiveLoopMode() {
+      liveLoopEnabled = !liveLoopEnabled;
+      const dot = document.getElementById('live-loop-dot');
+      const btn = document.getElementById('btn-live-loop');
+      if (liveLoopEnabled) {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
+        btn.classList.add('border-emerald-400/40', 'text-emerald-200');
+        showToast('Live Hands-Free Loop ON — Speak freely!');
+        startVoiceListening();
+      } else {
+        dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+        btn.classList.remove('border-emerald-400/40', 'text-emerald-200');
+        if (isListening && recognition) recognition.stop();
+        showToast('Live Loop OFF');
+      }
+    }
+
+    // =========================================================================
+    // 7. UI HELPERS, DRAWERS & FORM HANDLERS
+    // =========================================================================
+    function handleTextSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById('user-input');
+      const text = input.value;
+      if (!text.trim()) return;
+      input.value = '';
+      processUserMessage(text);
+    }
+
+    function sendQuickPrompt(promptText) {
+      processUserMessage(promptText);
+    }
+
+    function handleLanguageChange() {
+      selectedLanguage = document.getElementById('language-select').value;
+      const label = document.getElementById('language-select').selectedOptions[0].text;
+      document.getElementById('detected-lang-badge').textContent = selectedLanguage === 'auto' ? 'Auto-Lang Ready' : label;
+      showToast(`Language Mode: ${label}`);
+    }
+
+    function togglePitchDrawer() {
+      const drawer = document.getElementById('pitch-drawer');
+      drawer.classList.toggle('translate-x-full');
+    }
+
+    function presentPitchSlide(index) {
+      const slide = PITCH_SLIDES[index];
+      if (!slide) return;
+      togglePitchDrawer();
+      triggerCharacterAction('pitch', false);
+      processUserMessage(slide.prompt);
+    }
+
+    function toggleChatHistory() {
+      const drawer = document.getElementById('history-drawer');
+      drawer.classList.toggle('-translate-x-full');
+    }
+
+    function addMessageToLog(sender, text) {
+      const container = document.getElementById('chat-log-container');
+      const item = document.createElement('div');
+      if (sender === 'user') {
+        item.className = 'flex justify-end';
+        item.innerHTML = `<div class="max-w-[82%] rounded-2xl rounded-tr-sm px-3.5 py-2.5 bg-sky-500/25 border border-sky-400/30 text-white text-xs leading-relaxed">${escapeHtml(text)}</div>`;
+      } else {
+        const charName = CHARACTERS[currentCharId].name;
+        item.className = 'flex justify-start';
+        item.innerHTML = `<div class="max-w-[85%] rounded-2xl rounded-tl-sm px-3.5 py-2.5 bg-white/10 border border-white/15 text-slate-100 text-xs leading-relaxed"><div class="text-[10px] font-bold text-sky-400 mb-1">${charName}</div>${escapeHtml(text)}</div>`;
+      }
+      container.appendChild(item);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function clearChatHistory() {
+      conversationHistory = [];
+      document.getElementById('chat-log-container').innerHTML = '';
+      showToast('Conversation log cleared');
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    let toastTimeout;
+    function showToast(msg) {
+      const banner = document.getElementById('toast-banner');
+      document.getElementById('toast-text').textContent = msg;
+      banner.classList.remove('opacity-0', '-translate-y-2');
+      banner.classList.add('opacity-100', 'translate-y-0');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        banner.classList.add('opacity-0', '-translate-y-2');
+        banner.classList.remove('opacity-100', 'translate-y-0');
+      }, 2400);
+    }
+
+    // Boot Application on Window Load
+    window.onload = function () {
+      initThreeJS();
+      animate();
+      addMessageToLog('ai', CHARACTERS.aether.greeting);
+    };
+  </script>
+</body>
+</html>
