@@ -9,7 +9,7 @@ dotenv.config({ path: path.join(directory, '.env') })
 const app = express()
 const port = Number(process.env.PORT || 3000)
 const apiKey = process.env.GEMINI_API_KEY?.trim()
-const model = 'gemini-2.5-flash'
+const model = 'gemini-3.8-flash'
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535.')
@@ -136,6 +136,6 @@ app.use((error, _req, res, _next) => {
   return res.status(500).json({ error: 'Internal server error.' })
 })
 
-app.listen(port, '127.0.0.1', () => {
-  console.log(`Aetheria server running at http://127.0.0.1:${port}`)
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Aetheria server running at http://0.0.0.0:${port}`)
 })
